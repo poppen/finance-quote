@@ -1,4 +1,4 @@
-package Finance::Quote::MorningstarJp;
+package Finance::Quote::MorningstarJP;
 require 5.005;
 
 use strict;
