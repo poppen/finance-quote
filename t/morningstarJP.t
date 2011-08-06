@@ -12,10 +12,12 @@ if ( not $ENV{ONLINE_TEST} )
    plan skip_all => 'Set $ENV{ONLINE_TEST} to run this test';
 }
 
-plan tests => 9;
+plan tests => 10;
 
 # Test MorningstarJp functions
-my $q = Finance::Quote->new();
+my $q        = Finance::Quote->new();
+my $year     = (localtime())[5] + 1900;
+my $lastyear = $year - 1;
 
 my %quotes = $q->morningstar_jp( "1031186A", "BOGUS" );
 ok(%quotes);
@@ -28,6 +30,8 @@ ok( $quotes{ "1031186A", "last" } > 0 );
 ok( $quotes{ "1031186A", "currency" } eq "JPY" );
 ok( $quotes{ "1031186A", "net" } );
 ok( $quotes{ "1031186A", "success" } );
+ok( substr( $quotes{ "1031186A", "date" }, 6, 4 ) == $year ||
+    substr( $quotes{ "1031186A", "date" }, 6, 4 ) == $lastyear );
 
 # Check that a bogus stock returns no-success
 ok( !$quotes{ "BOGUS", "success" } );
