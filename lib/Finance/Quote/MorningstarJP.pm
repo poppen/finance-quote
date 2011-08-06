@@ -8,10 +8,9 @@ use vars qw/$VERSION $MORNINGSTAR_SNAPSHOT_JP_URL $MORNINGSTAR_BASIC_JP_URL $MOR
 use Encode;
 use LWP::UserAgent;
 use HTTP::Request::Common;
-use HTML::Parser;
-use XML::XPath;
+use Web::Scraper;
 
-$VERSION = '1.0';
+$VERSION = '1.1';
 
 $MORNINGSTAR_SNAPSHOT_JP_URL = 'http://www.morningstar.co.jp/new_fund/sr_detail_snap.asp?fnc=';
 
@@ -41,68 +40,52 @@ sub morningstar_jp
 
        unless ( $snapshot_reply->is_success() )
        {
-           foreach my $symbol (@symbols)
-           {
-               $funds{ $symbol, 'success' }  = 0;
-               $funds{ $symbol, 'errormsg' } = 'HTTP failure';
-           }
-           return wantarray ? %funds : \%funds;
+           $funds{ $symbol, 'success' }  = 0;
+           $funds{ $symbol, 'errormsg' } = 'HTTP failure';
+           next;
        }
 
-       $snapshot_content = decode( 'shiftjis', $snapshot_reply->content() );
-
-       $snapshot_root = parseHtml($snapshot_content);
-
-       if ($snapshot_root)
+       my $parse_result = parseHtml( $snapshot_reply->decoded_content );
+       if (
+          defined $parse_result->{name} ||
+          defined $parse_result->{date} ||
+          defined $parse_result->{last} ||
+          defined $parse_result->{net}
+       )
        {
-           $snapshot_parser = XML::XPath->new( context => $snapshot_root );
-
-           # XPath to the fund name
-           if ( scalar( my @fundname_list = $snapshot_parser->findnodes("/descendant::node()/child::comment()[contains(self::comment(), '\x{25bd}\x{30d5}\x{30a1}\x{30f3}\x{30c9}\x{540d}')]/following-sibling::node()/tr/td/td/span/b/text()")->get_nodelist() ) > 0 )
-           {
-               $funds{ $symbol, 'name' }     = $fundname_list[0]->toString();
-               $funds{ $symbol, 'symbol' }   = $symbol;
-               $funds{ $symbol, 'currency' } = 'JPY';
-               $funds{ $symbol, 'timezone' } = 'Asia/Japan';
-               $funds{ $symbol, 'success' }  = 1;
-               $funds{ $symbol, 'method' }   = 'morningstar_jp';
-
-               # XPath to the date
-               if ( scalar( my @date_list = $snapshot_parser->findnodes("/descendant::node()[contains(child::comment(), '\x{57fa}\x{672c}\x{60c5}\x{5831}')]/table/tr/table/tr/td/div/text()")->get_nodelist() ) > 0 )
-               {
-                   my $date = $date_list[0]->toString();
-                   $date =~ m/\x{57fa}\x{6e96}\x{4fa1}\x{984d}\((\d{4})-(\d{2})-(\d{2})\)/;
-                   $date = sprintf( "%02d/%02d/%02d", $2, $3, $1 % 100 );
-
-                   $funds{ $symbol, 'date' } = $date;
-               }
-
-               # XPath to the last price
-               if ( scalar( my @last_list = $snapshot_parser->findnodes("/descendant::node()[contains(child::comment(), '\x{57fa}\x{672c}\x{60c5}\x{5831}')]/table/tr/table/tr/td[2]/div/text()")->get_nodelist() ) > 0 )
-               {
-                   my $last = $last_list[0]->toString();
-                   $last =~ s/[, ]//g;
-                   $last =~ s/\x{5186}//g;
-
-                   $funds{ $symbol, 'last' } = $last / 10000;
-               }
-
-               # XPath to the net price change
-               if ( scalar( my @net_list = $snapshot_parser->findnodes("/descendant::node()[contains(child::comment(), '\x{57fa}\x{672c}\x{60c5}\x{5831}')]/table/tr/table/tr[2]/tr/td[2]/div/text()")->get_nodelist() ) > 0 )
-               {
-                   my $net = $net_list[0]->toString();
-                   $net =~ s/[, ]//g;
-                   $net =~ s/\x{5186}//g;
-
-                   $funds{ $symbol, 'net' } = $net;
-               }
-           }
+           $funds{ $symbol, 'name' }     = encode( 'utf8', $parse_result->{name} );
+           $funds{ $symbol, 'symbol' }   = $symbol;
+           $funds{ $symbol, 'currency' } = 'JPY';
+           $funds{ $symbol, 'timezone' } = 'Asia/Japan';
+           $funds{ $symbol, 'success' }  = 1;
+           $funds{ $symbol, 'method' }   = 'morningstar_jp';
+           $funds{ $symbol, 'date' }     = $parse_result->{date};
+           $funds{ $symbol, 'last' }     = $parse_result->{last};
+           $funds{ $symbol, 'net' }      = $parse_result->{net};
        }
-
-       unless ( $funds{ $symbol, 'success' } )
+       elsif ( !defined $parse_result->{name} )
        {
            $funds{ $symbol, 'success' }  = 0;
            $funds{ $symbol, 'errormsg' } = 'Fund name not found';
+           next;
+       }
+       elsif ( !defined $parse_result->{date} )
+       {
+           $funds{ $symbol, 'success' }  = 0;
+           $funds{ $symbol, 'errormsg' } = 'Parse date error';
+           next;
+       }
+       elsif ( !defined $parse_result->{last} )
+       {
+           $funds{ $symbol, 'success' }  = 0;
+           $funds{ $symbol, 'errormsg' } = 'Parse last error';
+           next;
+       }
+       elsif ( !defined $parse_result->{net} )
+       {
+           $funds{ $symbol, 'success' }  = 0;
+           $funds{ $symbol, 'errormsg' } = 'Parse net error';
+           next;
        }
    }
 
@@ -112,79 +95,39 @@ sub morningstar_jp
 
 sub parseHtml
 {
-   my ($content) = @_;
+   my $content = shift;
 
-   my $xml_root;
-   my $xml_current;
-   my $html_parser = new HTML::Parser(
-       api_version        => 3,
-       case_sensitive     => 1,
-       empty_element_tags => 1,
-       handlers           => {
-           comment => [
-               sub {
-                   my ($token0) = @_;
+   my $scraper = scraper {
+      process '//span[@class="namefund"]/b', 'name' => 'TEXT';
+      process '//form[@id="ms_main"]//div[@class="maintable2"]/table[1]/tr/td[1]/table[2]/tr[1]/td[2]',
+         'last' => [ 'TEXT', sub { tr/0-9//cd; } ];
+      process '//form[@id="ms_main"]//div[@class="maintable2"]/table[1]/tr/td[1]/table[2]/tr[1]/td[1]',
+         'date' => [ 'TEXT', \&_parse_date ];
+      process '//form[@id="ms_main"]//div[@class="maintable2"]/table[1]/tr/td[1]/table[2]/tr[3]/td[2]',
+         'net' => [ 'TEXT', \&_trim_net ];
+   };
 
-                   my $comment_node = new XML::XPath::Node::Comment($token0);
-                   $xml_current->appendChild($comment_node);
-               },
-               'token0'
-           ],
-           end => [
-               sub {
-                   $xml_current = $xml_current->getParentNode();
-               },
-           ],
-           end_document => [
-               sub {
-                   $xml_current = undef;
-               },
-           ],
-           process => [
-               sub {
-                   my ( $tagname, $token0 ) = @_;
+   my $result = $scraper->scrape($content);
+   return $result;
+}
 
-                   my $process_node = new XML::XPath::Node::PI( $tagname, $token0 );
-                   $xml_current->appendChild($process_node);
-               },
-               'tagname, token0'
-           ],
-           start => [
-               sub {
-                   my ( $tagname, $attrseq, $attr ) = @_;
+sub _parse_date
+{
+   my $str = shift;
+   if ( $str =~ /\((.*)\)/ )
+   {
+      my ($yyyy, $mm, $dd) = split '-', $1;
+      return sprintf "%02d/%02d/%d", $mm, $dd, $yyyy;
+   }
+}
 
-                   my $element_node = new XML::XPath::Node::Element($tagname);
-                   foreach my $attr_key (@$attrseq)
-                   {
-                       my $attribute_node = new XML::XPath::Node::Attribute( $attr_key, $attr->{$attr_key} );
-                       $element_node->appendAttribute($attribute_node);
-                   }
-                   $xml_current->appendChild($element_node);
-                   $xml_current = $element_node;
-               },
-               'tagname, attrseq, attr'
-           ],
-           start_document => [
-               sub {
-                   $xml_root    = new XML::XPath::Node::Element('root');
-                   $xml_current = $xml_root;
-               },
-           ],
-           text => [
-               sub {
-                   my ($dtext) = @_;
-
-                   my $text_node = new XML::XPath::Node::Text($dtext);
-                   $xml_current->appendChild($text_node);
-               },
-               'dtext'
-           ],
-       },
-   );
-
-   $html_parser->parse($content);
-
-   return $xml_root;
+sub _trim_net
+{
+   my $str = shift;
+   if ( $str =~ /(^[+-]?\d+)/ )
+   {
+      return $1;
+   }
 }
 
 1;
