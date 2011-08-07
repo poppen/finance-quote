@@ -30,10 +30,11 @@ sub morningstar_jp {
     return unless @symbols;
 
     my ( $user_agent, $snapshot_url, $snapshot_reply, $snapshot_content,
-        $snapshot_root, $snapshot_parser, $new_symbol, %funds );
+        $snapshot_root, $snapshot_parser, %funds );
 
     foreach my $symbol (@symbols) {
         $user_agent = $quoter->user_agent;
+        my $new_symbol;
 
         # Getting new symbol
         unless ( _is_new_symbol($symbol) ) {
@@ -53,7 +54,10 @@ sub morningstar_jp {
             }
         }
 
-        $snapshot_url   = $MORNINGSTAR_SNAPSHOT_JP_URL . $new_symbol;
+        my $target_symbol =
+            defined $new_symbol ? $new_symbol : $symbol;
+
+        $snapshot_url   = $MORNINGSTAR_SNAPSHOT_JP_URL . $target_symbol;
         $snapshot_reply = $user_agent->request( GET($snapshot_url) );
         unless ( $snapshot_reply->is_success() ) {
             $funds{ $symbol, 'success' }  = 0;
