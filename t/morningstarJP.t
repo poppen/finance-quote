@@ -11,7 +11,7 @@ if ( not $ENV{ONLINE_TEST} ) {
     plan skip_all => 'Set $ENV{ONLINE_TEST} to run this test';
 }
 
-plan tests => 12;
+plan tests => 13;
 
 # Test MorningstarJp functions
 my $q        = Finance::Quote->new();
@@ -39,6 +39,8 @@ ok( $quotes{ "1031186A", "net" } );
 ok( $quotes{ "1031186A", "success" } );
 ok(      substr( $quotes{ "1031186A", "date" }, 6, 4 ) == $year
       || substr( $quotes{ "1031186A", "date" }, 6, 4 ) == $lastyear );
+ok(      substr( $quotes{ "1031186A", "isodate" }, 0, 4 ) == $year
+      || substr( $quotes{ "1031186A", "isodate" }, 0, 4 ) == $lastyear );
 
 # Check that a bogus stock returns no-success
 ok( !$quotes{ "BOGUS", "success" } );
