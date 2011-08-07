@@ -1,23 +1,19 @@
 package Finance::Quote::MorningstarJP;
-require 5.005;
+require 5.006;
 
+use warnings;
 use strict;
 
-use vars
-  qw/$VERSION $MORNINGSTAR_SNAPSHOT_JP_URL $MORNINGSTAR_OLD_SNAPSHOT_JP_URL $MORNINGSTAR_BASIC_JP_URL $MORNINGSTAR_RATING_JP_URL/;
+our $VERSION = '1.2';
+my $MORNINGSTAR_SNAPSHOT_JP_URL =
+  'http://www.morningstar.co.jp/FundData/SnapShot.do?fnc=';
+my $MORNINGSTAR_OLD_SNAPSHOT_JP_URL =
+  'http://www.morningstar.co.jp/new_fund/sr_detail_snap.asp?fnc=';
 
 use Encode;
 use LWP::UserAgent;
 use HTTP::Request::Common;
 use Web::Scraper;
-
-$VERSION = '1.2';
-
-$MORNINGSTAR_SNAPSHOT_JP_URL =
-  'http://www.morningstar.co.jp/FundData/SnapShot.do?fnc=';
-
-$MORNINGSTAR_OLD_SNAPSHOT_JP_URL =
-  'http://www.morningstar.co.jp/new_fund/sr_detail_snap.asp?fnc=';
 
 sub methods { return ( morningstar_jp => \&morningstar_jp ); }
 
