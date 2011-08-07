@@ -145,20 +145,6 @@ sub _parse_old_snapshot {
     my $content = shift;
 
     my $scraper = scraper {
-        process '//span[@class="namefund"]/b', 'name' => 'TEXT';
-
-        process
-'//form[@id="ms_main"]//div[@class="maintable2"]/table[1]/tr/td[1]/table[2]/tr[1]/td[2]',
-          'last' => [ 'TEXT', sub { tr/0-9//cd; } ];
-
-        process
-'//form[@id="ms_main"]//div[@class="maintable2"]/table[1]/tr/td[1]/table[2]/tr[1]/td[1]',
-          'date' => [ 'TEXT', \&_parse_date ];
-
-        process
-'//form[@id="ms_main"]//div[@class="maintable2"]/table[1]/tr/td[1]/table[2]/tr[3]/td[2]',
-          'net' => [ 'TEXT', \&_trim_net ];
-
         process '.stextgray',
           'new_symbol' => [ 'TEXT', sub { ( split /\s/, $_ )[1] } ];
     };
@@ -207,14 +193,6 @@ sub _parse_jp_date {
     }
 }
 
-sub _parse_date {
-    my $str = shift;
-    if ( $str =~ /\((.*)\)/ ) {
-        my ( $yyyy, $mm, $dd ) = split '-', $1;
-        return sprintf "%02d/%02d/%d", $mm, $dd, $yyyy;
-    }
-}
-
 sub _build_plus_net {
     my $change = shift;
     my $result = _parse_change($change);
@@ -251,13 +229,6 @@ sub _parse_change {
     my $change = shift;
     if ( $change =~ /(\d+)\x{5186}\x{ff08}(.*)\x{ff05}\x{ff09}/ ) {
         return { net => $1, p_change => $2 };
-    }
-}
-
-sub _trim_net {
-    my $str = shift;
-    if ( $str =~ /(^[+-]?\d+)/ ) {
-        return $1;
     }
 }
 
