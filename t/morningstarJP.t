@@ -11,7 +11,7 @@ if ( not $ENV{ONLINE_TEST} ) {
     plan skip_all => 'Set $ENV{ONLINE_TEST} to run this test';
 }
 
-plan tests => 10;
+plan tests => 11;
 
 # Test MorningstarJp functions
 my $q        = Finance::Quote->new();
@@ -20,6 +20,11 @@ my $lastyear = $year - 1;
 
 my %quotes = $q->morningstar_jp( "1031186A", "BOGUS" );
 ok(%quotes);
+
+ok(
+    $quotes{ "1031186A", "new_symbol" } eq "1986103001",
+    "1031186A's new_symbol should be 1986103001"
+);
 
 # Check all the defined values
 ok( length( $quotes{ "1031186A", "symbol" } ) > 0 );
